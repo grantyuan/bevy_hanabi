@@ -1,7 +1,11 @@
 use rand::Rng;
 use std::{borrow::Cow, cmp::Ordering, num::NonZeroU64, ops::Range};
 
-use crate::{asset::EffectAsset, render::Particle, ParticleEffect};
+use crate::{
+    asset::EffectAsset,
+    render::{GpuDrawIndirect, Particle},
+    ParticleEffect,
+};
 
 use bevy::{
     asset::{AssetEvent, Assets, Handle, HandleUntyped},
@@ -72,9 +76,26 @@ impl SliceRef {
     }
 }
 
+pub enum BufferKind {
+    Particles,
+    DeadList,
+    DrawIndirect,
+    IndirectBuffer,
+}
+
+struct BestRange {
+    range: Range<u32>,
+    capacity: u32,
+    index: usize,
+}
+
 pub struct EffectBuffer {
     /// GPU buffer holding all particles for the entire group of effects.
     particle_buffer: Buffer,
+    /// GPU buffer holding the indices of the dead particles for the entire group of effects.
+    dead_list_buffer: Buffer,
+    /// GPU buffer holding the drawing indices for the entire group of effects.
+    draw_indirect_buffer: Buffer,
     /// GPU buffer holding the indirection indices for the entire group of effects.
     indirect_buffer: Buffer,
     /// Size of each particle, in bytes.
@@ -95,15 +116,10 @@ pub struct EffectBuffer {
     asset: Handle<EffectAsset>,
 }
 
-struct BestRange {
-    range: Range<u32>,
-    capacity: u32,
-    index: usize,
-}
-
 impl EffectBuffer {
     /// Minimum buffer capacity to allocate, in number of particles.
-    pub const MIN_CAPACITY: u32 = 65536; // at least 64k particles
+    //pub const MIN_CAPACITY: u32 = 65536; // at least 64k particles
+    pub const MIN_CAPACITY: u32 = 256; // TEMP for debug
 
     /// Create a new group and a GPU buffer to back it up.
     pub fn new(
@@ -120,28 +136,74 @@ impl EffectBuffer {
             item_size
         );
         let capacity = capacity.max(Self::MIN_CAPACITY);
-        let particle_capacity_bytes: BufferAddress = capacity as u64 * item_size as u64;
-        let particle_buffer = render_device.create_buffer(&BufferDescriptor {
-            label,
-            size: particle_capacity_bytes,
-            usage: BufferUsages::COPY_DST | BufferUsages::STORAGE,
-            mapped_at_creation: false,
-        });
-        let indirect_label = if let Some(label) = label {
-            format!("{}_indirect", label)
-        } else {
-            "vfx_indirect_buffer".to_owned()
+
+        let particle_buffer = {
+            let particle_capacity_bytes: BufferAddress = capacity as u64 * item_size as u64;
+            render_device.create_buffer(&BufferDescriptor {
+                label,
+                size: particle_capacity_bytes,
+                usage: BufferUsages::COPY_DST | BufferUsages::STORAGE,
+                mapped_at_creation: false,
+            })
         };
-        let indirect_capacity_bytes: BufferAddress =
-            capacity as u64 * std::mem::size_of::<u32>() as u64;
-        let indirect_buffer = render_device.create_buffer(&BufferDescriptor {
-            label: Some(&indirect_label),
-            size: indirect_capacity_bytes,
-            usage: BufferUsages::COPY_DST | BufferUsages::STORAGE,
-            mapped_at_creation: false,
-        });
+
+        let dead_list_buffer = {
+            let dead_list_label = if let Some(label) = label {
+                format!("{}_dead_list", label)
+            } else {
+                "vfx_dead_list_buffer".to_owned()
+            };
+            // The DeadList buffers contains its size as first element. This is a dirty trick to workaround
+            // the missing access to the Counter that we have with HLSL SM 5.0 for UAVs. This should be
+            // refactored to avoid the de-aligning "N+1" total size.
+            let mut content = Vec::<u32>::with_capacity((1 + capacity) as usize);
+            content.push(capacity - 1); // index of last free item
+            for idx in 0..capacity {
+                content.push(capacity - 1 - idx);
+            }
+            render_device.create_buffer_with_data(&BufferInitDescriptor {
+                label: Some(&dead_list_label),
+                contents: cast_slice(content.as_slice()),
+                usage: BufferUsages::COPY_DST | BufferUsages::STORAGE,
+            })
+        };
+
+        let draw_indirect_buffer = {
+            let draw_indirect_label = if let Some(label) = label {
+                format!("{}_draw_indirect", label)
+            } else {
+                "vfx_draw_indirect_buffer".to_owned()
+            };
+            let draw_indirect_capacity_bytes: BufferAddress =
+                capacity as u64 * std::mem::size_of::<GpuDrawIndirect>() as u64;
+            render_device.create_buffer(&BufferDescriptor {
+                label: Some(&draw_indirect_label),
+                size: draw_indirect_capacity_bytes,
+                usage: BufferUsages::COPY_DST | BufferUsages::STORAGE,
+                mapped_at_creation: false,
+            })
+        };
+
+        let indirect_buffer = {
+            let indirect_label = if let Some(label) = label {
+                format!("{}_indirect", label)
+            } else {
+                "vfx_indirect_buffer".to_owned()
+            };
+            let indirect_capacity_bytes: BufferAddress =
+                capacity as u64 * std::mem::size_of::<u32>() as u64;
+            render_device.create_buffer(&BufferDescriptor {
+                label: Some(&indirect_label),
+                size: indirect_capacity_bytes,
+                usage: BufferUsages::COPY_DST | BufferUsages::STORAGE,
+                mapped_at_creation: false,
+            })
+        };
+
         EffectBuffer {
             particle_buffer,
+            dead_list_buffer,
+            draw_indirect_buffer,
             indirect_buffer,
             item_size,
             capacity,
@@ -167,33 +229,52 @@ impl EffectBuffer {
     }
 
     /// Return a binding for the entire buffer.
-    pub fn max_binding(&self) -> BindingResource {
-        let capacity_bytes = self.capacity as u64 * self.item_size as u64;
-        BindingResource::Buffer(BufferBinding {
-            buffer: &self.particle_buffer,
-            offset: 0,
-            size: Some(NonZeroU64::new(capacity_bytes).unwrap()),
-        })
+    pub fn max_binding(&self, kind: BufferKind) -> BindingResource {
+        match kind {
+            BufferKind::Particles => {
+                let capacity_bytes = self.capacity as u64 * self.item_size as u64;
+                BindingResource::Buffer(BufferBinding {
+                    buffer: &self.particle_buffer,
+                    offset: 0,
+                    size: Some(NonZeroU64::new(capacity_bytes).unwrap()),
+                })
+            }
+            BufferKind::DeadList => {
+                let capacity_bytes = self.capacity as u64 * 4_u64;
+                BindingResource::Buffer(BufferBinding {
+                    buffer: &self.dead_list_buffer,
+                    offset: 0,
+                    size: Some(NonZeroU64::new(capacity_bytes).unwrap()),
+                })
+            }
+            BufferKind::DrawIndirect => {
+                let capacity_bytes =
+                    self.capacity as u64 * std::mem::size_of::<GpuDrawIndirect>() as u64;
+                BindingResource::Buffer(BufferBinding {
+                    buffer: &self.draw_indirect_buffer,
+                    offset: 0,
+                    size: Some(NonZeroU64::new(capacity_bytes).unwrap()),
+                })
+            }
+            BufferKind::IndirectBuffer => {
+                let capacity_bytes = self.capacity as u64 * 4_u64;
+                BindingResource::Buffer(BufferBinding {
+                    buffer: &self.indirect_buffer,
+                    offset: 0,
+                    size: Some(NonZeroU64::new(capacity_bytes).unwrap()),
+                })
+            }
+        }
     }
 
     /// Return a binding of the buffer for a starting range of a given size (in bytes).
-    pub fn binding(&self, size: u32) -> BindingResource {
-        BindingResource::Buffer(BufferBinding {
-            buffer: &self.particle_buffer,
-            offset: 0,
-            size: Some(NonZeroU64::new(size as u64).unwrap()),
-        })
-    }
-
-    /// Return a binding for the entire indirect buffer associated with the current effect buffer.
-    pub fn indirect_max_binding(&self) -> BindingResource {
-        let capacity_bytes = self.capacity as u64 * std::mem::size_of::<u32>() as u64;
-        BindingResource::Buffer(BufferBinding {
-            buffer: &self.indirect_buffer,
-            offset: 0,
-            size: Some(NonZeroU64::new(capacity_bytes).unwrap()),
-        })
-    }
+    // pub fn binding(&self, size: u32) -> BindingResource {
+    //     BindingResource::Buffer(BufferBinding {
+    //         buffer: &self.particle_buffer,
+    //         offset: 0,
+    //         size: Some(NonZeroU64::new(size as u64).unwrap()),
+    //     })
+    // }
 
     fn pop_free_slice(&mut self, size: u32) -> Option<Range<u32>> {
         if self.free_slices.is_empty() {
@@ -310,7 +391,7 @@ impl EffectCache {
         item_size: u32,
         //pipeline: ComputePipeline,
         _queue: &RenderQueue,
-    ) -> EffectCacheId {
+    ) -> (EffectCacheId, EffectSlice) {
         let (buffer_index, slice) = self
             .buffers
             .iter_mut()
@@ -365,8 +446,13 @@ impl EffectCache {
             slice.range,
             slice.item_size
         );
+        let effect_slice = EffectSlice {
+            slice: slice.range.clone(),
+            group_index: buffer_index as u32,
+            item_size: slice.item_size,
+        };
         self.effects.insert(id, (buffer_index, slice));
-        return id;
+        return (id, effect_slice);
     }
 
     pub fn get_slice(&self, id: EffectCacheId) -> EffectSlice {

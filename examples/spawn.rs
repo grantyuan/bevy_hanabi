@@ -19,7 +19,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .insert_resource(options)
         .insert_resource(bevy::log::LogSettings {
             level: bevy::log::Level::WARN,
-            filter: "bevy_hanabi=error,spawn=trace".to_string(),
+            filter: "bevy_hanabi=trace,spawn=trace".to_string(),
         })
         .add_plugins(DefaultPlugins)
         .add_plugin(HanabiPlugin)

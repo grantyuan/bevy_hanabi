@@ -21,8 +21,8 @@ struct VertexOutput {
 #endif
 };
 
-[[group(0), binding(0)]] var<uniform> view: View;
-[[group(1), binding(0)]] var<storage, read> particle_buffer : ParticlesBuffer;
+[[group(0), binding(0)]] var<storage, read> particle_buffer : ParticlesBuffer;
+[[group(1), binding(0)]] var<uniform> view: View;
 #ifdef PARTICLE_TEXTURE
 [[group(2), binding(0)]] var particle_texture: texture_2d<f32>;
 [[group(2), binding(1)]] var particle_sampler: sampler;

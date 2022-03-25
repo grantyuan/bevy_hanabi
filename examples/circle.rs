@@ -22,11 +22,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .insert_resource(options)
         .insert_resource(bevy::log::LogSettings {
             level: bevy::log::Level::WARN,
-            filter: "bevy_hanabi=error,circle=trace".to_string(),
+            filter: "bevy_hanabi=trace,circle=trace".to_string(),
         })
         .add_plugins(DefaultPlugins)
+        .add_system(bevy::input::system::exit_on_esc_system)
         .add_plugin(HanabiPlugin)
-        //.add_plugin(WorldInspectorPlugin::new())
+        .add_plugin(WorldInspectorPlugin::new())
         .add_startup_system(setup)
         .run();
 
@@ -56,7 +57,7 @@ fn setup(
         EffectAsset {
             name: "Gradient".to_string(),
             // TODO: Figure out why no particle spawns if this is 1
-            capacity: 32768,
+            capacity: 256,
             spawner: Spawner::once(32.0.into(), true),
             ..Default::default()
         }

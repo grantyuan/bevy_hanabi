@@ -12,9 +12,8 @@ use crate::{
     render::{
         extract_effect_events, extract_effects, prepare_effects, queue_effects, ComputeCache,
         DrawEffects, EffectAssetEvents, EffectBindGroups, EffectSystems, EffectsMeta,
-        ExtractedEffects, ImageBindGroups, ParticleUpdateNode, ParticlesRenderPipeline,
-        ParticlesUpdatePipeline, PipelineRegistry, SimParams, PARTICLES_RENDER_SHADER_HANDLE,
-        PARTICLES_UPDATE_SHADER_HANDLE,
+        ExtractedEffects, ImageBindGroups, ParticleUpdateNode, ParticlesInitPipeline,
+        ParticlesRenderPipeline, ParticlesUpdatePipeline, PipelineRegistry, SimParams,
     },
 };
 
@@ -40,13 +39,6 @@ impl Plugin for HanabiPlugin {
         // app.add_system(hanabi_spawn.system())
         //     .add_system(hanabi_update.system());
 
-        // Register the particles shaders
-        let mut shaders = app.world.get_resource_mut::<Assets<Shader>>().unwrap();
-        let update_shader = Shader::from_wgsl(include_str!("render/particles_update.wgsl"));
-        shaders.set_untracked(PARTICLES_UPDATE_SHADER_HANDLE, update_shader);
-        let render_shader = Shader::from_wgsl(include_str!("render/particles_render.wgsl"));
-        shaders.set_untracked(PARTICLES_RENDER_SHADER_HANDLE, render_shader);
-
         // Register the component reflection
         //app.register_type::<ParticleEffect>();
 
@@ -59,6 +51,8 @@ impl Plugin for HanabiPlugin {
             .insert_resource(effects_meta)
             .init_resource::<ImageBindGroups>()
             .init_resource::<EffectBindGroups>()
+            .init_resource::<ParticlesInitPipeline>()
+            .init_resource::<ComputeCache<ParticlesInitPipeline>>()
             .init_resource::<ParticlesUpdatePipeline>()
             .init_resource::<ComputeCache<ParticlesUpdatePipeline>>()
             .init_resource::<ParticlesRenderPipeline>()
