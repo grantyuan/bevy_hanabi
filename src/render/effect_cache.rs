@@ -157,7 +157,7 @@ impl EffectBuffer {
             // the missing access to the Counter that we have with HLSL SM 5.0 for UAVs. This should be
             // refactored to avoid the de-aligning "N+1" total size.
             let mut content = Vec::<u32>::with_capacity((1 + capacity) as usize);
-            content.push(capacity - 1); // index of last free item
+            content.push(capacity);
             for idx in 0..capacity {
                 content.push(capacity - 1 - idx);
             }
@@ -240,7 +240,7 @@ impl EffectBuffer {
                 })
             }
             BufferKind::DeadList => {
-                let capacity_bytes = self.capacity as u64 * 4_u64;
+                let capacity_bytes = (self.capacity + 1) as u64 * 4_u64;
                 BindingResource::Buffer(BufferBinding {
                     buffer: &self.dead_list_buffer,
                     offset: 0,

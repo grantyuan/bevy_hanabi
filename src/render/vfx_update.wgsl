@@ -32,6 +32,7 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
     // Age the particle
     var vAge : f32 = particle_buffer.particles[index].age;
     var vLifetime : f32 = particle_buffer.particles[index].lifetime;
+    var wasDead : bool = (vAge >= vLifetime);
     vAge = vAge + sim_params.dt;
     if (vAge < vLifetime) {
         // Load current particle attributes
@@ -46,12 +47,11 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
         particle_buffer.particles[index].pos = vPos;
         particle_buffer.particles[index].vel = vVel;
         particle_buffer.particles[index].age = vAge;
-        particle_buffer.particles[index].lifetime = vLifetime;
 
         // Write indirection for drawing
         var indirect_index = atomicAdd(&draw_indirect.instance_count, 1u);
         indirect_buffer.indices[indirect_index] = index;
-    } else {
+    } else if (!wasDead) {
         // Write back age to ensure particle stays dead even if (dt == 0)
         particle_buffer.particles[index].age = vLifetime;
 

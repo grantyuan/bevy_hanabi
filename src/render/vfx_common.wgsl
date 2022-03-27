@@ -72,9 +72,12 @@ struct IndirectBuffer {
 
 // List of indices of dead particles.
 struct DeadList {
-    // Number of consecutive dead particle indices in the indices array.
+    // Number of consecutive "available" dead particle indices in the indices
+    // array below. This is the number of particles actually dead that can be
+    // recycled this frame.
     count: atomic<u32>;
-    // Indices of dead particles into the particle buffer.
+    // Indices of dead particles into the particle buffer. Only values at an
+    // index < 'count' in this array are valid; other values are garbage.
     indices: [[stride(4)]] array<u32>;
 };
 

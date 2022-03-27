@@ -44,7 +44,7 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
     }
 
     // Recycle a dead particle
-    let dead_index = atomicSub(&dead_list.count, 1u);
+    let dead_index = atomicSub(&dead_list.count, 1u) - 1u;
     let index = dead_list.indices[dead_index];
 
     // Update PRNG seed for this particle
