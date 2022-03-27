@@ -118,8 +118,7 @@ pub struct EffectBuffer {
 
 impl EffectBuffer {
     /// Minimum buffer capacity to allocate, in number of particles.
-    //pub const MIN_CAPACITY: u32 = 65536; // at least 64k particles
-    pub const MIN_CAPACITY: u32 = 256; // TEMP for debug
+    pub const MIN_CAPACITY: u32 = 65536; // at least 64k particles
 
     /// Create a new group and a GPU buffer to back it up.
     pub fn new(
