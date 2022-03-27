@@ -2056,18 +2056,15 @@ impl Node for ParticleUpdateNode {
         //     world.entities(),
         //     world.components()
         // );
-        trace!("begin compute init pass...");
-        render_context
-            .command_encoder
-            .push_debug_group("hanabi_init");
 
         // Compute init pass
+        trace!("begin compute init pass...");
         {
             let mut compute_pass =
                 render_context
                     .command_encoder
                     .begin_compute_pass(&ComputePassDescriptor {
-                        label: Some("init_compute_pass"),
+                        label: Some("hanabi_init"),
                     });
 
             let effects_meta = world.get_resource::<EffectsMeta>().unwrap();
@@ -2154,9 +2151,6 @@ impl Node for ParticleUpdateNode {
                 }
             }
         }
-
-        // End encoder for init pass
-        render_context.command_encoder.pop_debug_group();
         trace!("compute init pass done");
 
         // Copy final dead particle count to dispatch buffer
@@ -2172,18 +2166,15 @@ impl Node for ParticleUpdateNode {
         //     world.entities(),
         //     world.components()
         // );
-        trace!("begin compute update pass...");
-        render_context
-            .command_encoder
-            .push_debug_group("hanabi_update");
 
         // Compute update pass
+        trace!("begin compute update pass...");
         {
             let mut compute_pass =
                 render_context
                     .command_encoder
                     .begin_compute_pass(&ComputePassDescriptor {
-                        label: Some("update_compute_pass"),
+                        label: Some("hanabi_update"),
                     });
 
             let effects_meta = world.get_resource::<EffectsMeta>().unwrap();
@@ -2274,9 +2265,6 @@ impl Node for ParticleUpdateNode {
                 }
             }
         }
-
-        // End encoder for update pass
-        render_context.command_encoder.pop_debug_group();
         trace!("compute update pass done");
 
         Ok(())
