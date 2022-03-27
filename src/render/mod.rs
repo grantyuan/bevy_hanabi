@@ -186,6 +186,10 @@ pub(crate) struct SimParams {
     time: f64,
     /// Frame timestep.
     dt: f32,
+
+    // TODO - Add time from beginning of VFX system activation ("simulation time") and rename
+    // `time` to `app_time` or so, which is the time since the app started, and is usually
+    // greater.
 }
 
 /// GPU representation of [`SimParams`].
@@ -194,7 +198,8 @@ pub(crate) struct SimParams {
 struct SimParamsUniform {
     dt: f32,
     time: f32,
-    pad: [f32; 2],
+    __pad0: f32,
+    __pad1: f32,
 }
 
 impl Default for SimParamsUniform {
@@ -202,7 +207,8 @@ impl Default for SimParamsUniform {
         SimParamsUniform {
             dt: 0.04,
             time: 0.0,
-            pad: [0.0; 2],
+            __pad0: 0.0,
+            __pad1: 0.0,
         }
     }
 }
@@ -212,7 +218,7 @@ impl From<SimParams> for SimParamsUniform {
         SimParamsUniform {
             dt: src.dt,
             time: src.time as f32,
-            pad: [0.0; 2],
+            ..Default::default()
         }
     }
 }
@@ -365,6 +371,7 @@ impl FromWorld for ParticlesInitPipeline {
                 ty: BindingType::Buffer {
                     ty: BufferBindingType::Storage { read_only: false },
                     has_dynamic_offset: true,
+                    // 'count' + at least 1 item, both of type uint (4 bytes)
                     min_binding_size: BufferSize::new(4 * 2),
                 },
                 count: None,
@@ -498,6 +505,7 @@ impl FromWorld for ParticlesUpdatePipeline {
                 ty: BindingType::Buffer {
                     ty: BufferBindingType::Storage { read_only: false },
                     has_dynamic_offset: true,
+                    // 'count' + at least 1 item, both of type uint (4 bytes)
                     min_binding_size: BufferSize::new(4 * 2),
                 },
                 count: None,
@@ -1008,6 +1016,7 @@ pub(crate) fn extract_effects(
     let dt = time.delta_seconds();
     sim_params.time = time.seconds_since_startup();
     sim_params.dt = dt;
+    trace!("sim_params: time={} dt={}", sim_params.time, sim_params.dt);
 
     let mut extracted_effects = render_world.get_resource_mut::<ExtractedEffects>().unwrap();
 
