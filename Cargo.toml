@@ -48,6 +48,10 @@ required-features = [ "bevy/bevy_winit" ]
 name = "activate"
 required-features = [ "bevy/bevy_winit" ]
 
+[[example]]
+name = "multi"
+required-features = [ "bevy/bevy_winit" ]
+
 [workspace]
 resolver = "2"
 members = ["."]

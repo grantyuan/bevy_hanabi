@@ -466,6 +466,7 @@ impl FromWorld for ParticlesUpdatePipeline {
         let world = world.cell();
         let render_device = world.get_resource::<RenderDevice>().unwrap();
 
+        // FIXME - Use `max_compute_workgroups_per_dimension` to cap the dispatch() call (and therefore the number of particles updated per call)
         let limits = render_device.limits();
         bevy::log::info!(
             "GPU limits:\n- max_compute_invocations_per_workgroup={}\n- max_compute_workgroup_size_x={}\n- max_compute_workgroup_size_y={}\n- max_compute_workgroup_size_z={}\n- max_compute_workgroups_per_dimension={}",

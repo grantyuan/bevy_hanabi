@@ -115,7 +115,9 @@ impl<T: AsStd430> StorageVec<T> {
         if let Some(storage_buffer) = &self.storage_buffer {
             let range = slice.start as usize * self.item_size..slice.end as usize * self.item_size;
             let mut writer = std430::Writer::new(&mut self.scratch[range.clone()]);
-            writer.write(self.values.as_slice()).unwrap();
+            writer
+                .write(&self.values[slice.start as usize..slice.end as usize])
+                .unwrap();
             queue.write_buffer(
                 storage_buffer,
                 range.start as BufferAddress,
