@@ -2104,50 +2104,57 @@ impl Node for ParticleUpdateNode {
 
                     let spawner_base = batch.spawner_base;
                     let spawn_count = batch.spawn_count;
-                    let workgroup_count = (spawn_count + 63) / 64;
+                    if spawn_count > 0 {
+                        let workgroup_count = (spawn_count + 63) / 64;
 
-                    let buffer_offset = batch.slice.start;
+                        let buffer_offset = batch.slice.start;
 
-                    trace!(
-                        "record init commands for pipeline of effect {:?} ({} spawn / 64 = {} workgroups) spawner_base={} buffer_offset={}...",
-                        batch.handle,
-                        spawn_count,
-                        workgroup_count,
-                        spawner_base,
-                        buffer_offset,
-                    );
+                        trace!(
+                            "record init commands for pipeline of effect {:?} ({} spawn / 64 = {} workgroups) spawner_base={} buffer_offset={}...",
+                            batch.handle,
+                            spawn_count,
+                            workgroup_count,
+                            spawner_base,
+                            buffer_offset,
+                        );
 
-                    // Setup init compute pass
-                    compute_pass.set_pipeline(&compute_pipeline);
-                    let particle_offset = buffer_offset * item_size;
-                    compute_pass.set_bind_group(
-                        0,
-                        &bind_groups.common_particle_buffer,
-                        &[particle_offset],
-                    );
-                    let dead_list_offset = buffer_offset * std::mem::size_of::<u32>() as u32;
-                    compute_pass.set_bind_group(
-                        1,
-                        &bind_groups.common_dead_list,
-                        &[dead_list_offset],
-                    );
-                    let effect_params_offset =
-                        buffer_offset * EffectParamsUniform::std140_size_static() as u32;
-                    compute_pass.set_bind_group(
-                        2,
-                        effects_meta.spawner_bind_group.as_ref().unwrap(),
-                        &[effect_params_offset],
-                    );
-                    let dispatch_buffer_offset =
-                        batch.buffer_index * DispatchBuffer::std430_size_static() as u32;
-                    compute_pass.set_bind_group(
-                        3,
-                        effects_meta.dispach_buffer_bind_group.as_ref().unwrap(),
-                        &[dispatch_buffer_offset],
-                    );
-                    compute_pass.dispatch(workgroup_count, 1, 1);
+                        // Setup init compute pass
+                        compute_pass.set_pipeline(&compute_pipeline);
+                        let particle_offset = buffer_offset * item_size;
+                        compute_pass.set_bind_group(
+                            0,
+                            &bind_groups.common_particle_buffer,
+                            &[particle_offset],
+                        );
+                        let dead_list_offset = buffer_offset * std::mem::size_of::<u32>() as u32; // FIXME - This is not going to work because DeadList size is (N + 1) u32
+                        compute_pass.set_bind_group(
+                            1,
+                            &bind_groups.common_dead_list,
+                            &[dead_list_offset],
+                        );
+                        let spawner_params_offset =
+                            spawner_base * SpawnerParamsUniform::std140_size_static() as u32;
+                        compute_pass.set_bind_group(
+                            2,
+                            effects_meta.spawner_bind_group.as_ref().unwrap(),
+                            &[spawner_params_offset],
+                        );
+                        let dispatch_buffer_offset =
+                            batch.buffer_index * DispatchBuffer::std430_size_static() as u32;
+                        compute_pass.set_bind_group(
+                            3,
+                            effects_meta.dispach_buffer_bind_group.as_ref().unwrap(),
+                            &[dispatch_buffer_offset],
+                        );
+                        compute_pass.dispatch(workgroup_count, 1, 1);
 
-                    trace!("init compute dispatched");
+                        trace!("init compute dispatched");
+                    } else {
+                        trace!(
+                            "skipped init dispatch for effect {:?} with no spawn this frame.",
+                            batch.handle
+                        );
+                    }
                 }
             }
         }
