@@ -186,7 +186,6 @@ pub(crate) struct SimParams {
     time: f64,
     /// Frame timestep.
     dt: f32,
-
     // TODO - Add time from beginning of VFX system activation ("simulation time") and rename
     // `time` to `app_time` or so, which is the time since the app started, and is usually
     // greater.
@@ -708,6 +707,11 @@ impl SpecializedComputePipeline for ParticlesInitPipeline {
     type Key = ParticleInitPipelineKey;
 
     fn specialize(&self, key: Self::Key, render_device: &RenderDevice) -> ComputePipeline {
+        trace!(
+            "Specializing init pipeline: position_code={:?}",
+            key.position_code,
+        );
+
         let mut source = VFX_INIT_SHADER_TEMPLATE.replace("{{INIT_POS_VEL}}", &key.position_code);
         source.insert_str(0, VFX_COMMON_SHADER_IMPORT); // FIXME - #import not working on compute shaders
 
@@ -730,27 +734,24 @@ impl SpecializedComputePipeline for ParticlesInitPipeline {
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-pub struct ParticleUpdatePipelineKey {
-    /// Code for the position initialization of newly emitted particles.
-    position_code: String,
-}
+pub struct ParticleUpdatePipelineKey {}
 
 impl Default for ParticleUpdatePipelineKey {
     fn default() -> Self {
-        ParticleUpdatePipelineKey {
-            position_code: Default::default(),
-        }
+        ParticleUpdatePipelineKey {}
     }
 }
 
 impl SpecializedComputePipeline for ParticlesUpdatePipeline {
     type Key = ParticleUpdatePipelineKey;
 
-    fn specialize(&self, key: Self::Key, render_device: &RenderDevice) -> ComputePipeline {
-        let mut source = VFX_UPDATE_SHADER_TEMPLATE.replace("{{INIT_POS_VEL}}", &key.position_code);
+    fn specialize(&self, _key: Self::Key, render_device: &RenderDevice) -> ComputePipeline {
+        trace!("Specializing update compute pipeline...");
+
+        let mut source = VFX_UPDATE_SHADER_TEMPLATE.to_string();
         source.insert_str(0, VFX_COMMON_SHADER_IMPORT); // FIXME - #import not working on compute shaders
 
-        //trace!("Specialized compute pipeline:\n{}", source);
+        trace!("Specialized update compute pipeline:\n{}", source);
 
         let shader_module = render_device.create_shader_module(&ShaderModuleDescriptor {
             label: Some("particles_update.wgsl"),
@@ -1080,7 +1081,7 @@ pub(crate) fn extract_effects(
         if let Some(grad) = &asset.render_layout.size_color_gradient {
             vertex_modifiers += &grad.to_shader_code();
         }
-        trace!("vertex_modifiers={}", vertex_modifiers);
+        //trace!("vertex_modifiers={}", vertex_modifiers);
 
         // Configure the shader template, and make sure a corresponding shader asset exists
         let shader_source =
@@ -1088,15 +1089,14 @@ pub(crate) fn extract_effects(
         let shader = pipeline_registry.configure(&shader_source, &mut shaders);
 
         trace!(
-            "extracted: handle={:?} shader={:?} has_image={} position_code={}",
+            "extracted: handle={:?} shader={:?} has_image={}",
             effect.handle,
             shader,
             if asset.render_layout.particle_texture.is_some() {
                 "Y"
             } else {
                 "N"
-            },
-            position_code
+            }
         );
 
         extracted_effects.effects.insert(
@@ -1471,7 +1471,7 @@ pub(crate) fn prepare_effects(
         trace!("item_size = {}B", slice.item_size);
 
         position_code = extracted_effect.position_code.clone();
-        trace!("position_code = {}", position_code);
+        //trace!("position_code = {}", position_code);
 
         spawn_count = extracted_effect.spawn_count;
 
@@ -1765,10 +1765,6 @@ pub(crate) fn queue_effects(
     // TODO - Move to prepare(), there's no view-dependent thing here!
     for (_, mut batch) in effect_batches.iter_mut() {
         // Specialize the init pipeline based on the effect batch
-        trace!(
-            "Specializing init pipeline: position_code={:?}",
-            batch.position_code,
-        );
         let init_pipeline = init_compute_cache.specialize(
             &init_pipeline,
             ParticleInitPipelineKey {
@@ -1777,22 +1773,14 @@ pub(crate) fn queue_effects(
             &render_device,
         );
         batch.init_pipeline = Some(init_pipeline.clone());
-        trace!("Init pipeline specialized: {:?}", init_pipeline);
 
         // Specialize the update pipeline based on the effect batch
-        trace!(
-            "Specializing update pipeline: position_code={:?}",
-            batch.position_code,
-        );
         let update_pipeline = update_compute_cache.specialize(
             &update_pipeline,
-            ParticleUpdatePipelineKey {
-                position_code: batch.position_code.clone(),
-            },
+            ParticleUpdatePipelineKey {},
             &render_device,
         );
         batch.update_pipeline = Some(update_pipeline.clone());
-        trace!("Update pipeline specialized: {:?}", update_pipeline);
     }
 
     // Loop over all cameras/views that need to render effects
