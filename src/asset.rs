@@ -83,6 +83,11 @@ impl EffectAsset {
         self
     }
 
+    /// dynimally update modifier of the effect.
+    pub fn update_mut_ref<M: UpdateModifier + Send + Sync + 'static>(&mut self, modifier: M) {
+        modifier.apply(&mut self.update_layout);        
+    }
+
     /// Add a render modifier to the effect.
     pub fn render<M: RenderModifier + Send + Sync + 'static>(mut self, modifier: M) -> Self {
         modifier.apply(&mut self.render_layout);

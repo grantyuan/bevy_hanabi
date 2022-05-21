@@ -42,6 +42,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .add_plugin(HanabiPlugin)
         //.add_plugin(WorldInspectorPlugin::new())
         .add_startup_system(setup)
+        .add_system(update)
         .run();
 
     Ok(())
@@ -68,7 +69,7 @@ fn setup(
         ..Default::default()
     });
 
-    let cube = meshes.add(Mesh::from(Cube { size: 1.0 }));
+    let cube = meshes.add(Mesh::from(Cube { size: 5.0 }));
     let mat = materials.add(Color::PURPLE.into());
 
     let mut color_gradient1 = Gradient::new();
@@ -162,46 +163,121 @@ fn setup(
         });
 
     let mut gradient3 = Gradient::new();
-    gradient3.add_key(0.0, Vec4::new(0.0, 0.0, 1.0, 1.0));
-    gradient3.add_key(1.0, Vec4::splat(0.0));
+    gradient3.add_key(0.0, Vec4::new(0.0, 1.0, 1.0, 1.0));
+    gradient3.add_key(0.5, Vec4::splat(0.0));
+
+    let mut size_gradient3 = Gradient::new();
+    size_gradient3.add_key(0.0, Vec2::splat(0.4));
+    size_gradient3.add_key(0.5, Vec2::splat(0.0));
 
     let effect3 = effects.add(
         EffectAsset {
             name: "emit:burst".to_string(),
             capacity: 32768,
-            spawner: Spawner::burst(400.0.into(), 3.0.into()),
+            // spawner: Spawner::burst(400.0.into(), 3.0.into()),
+            // spawner: Spawner::burst(200.0.into(), 3.0.into()),
+            spawner: Spawner::rate(50.0.into()),
+
             ..Default::default()
         }
         .init(PositionSphereModifier {
             center: Vec3::ZERO,
             radius: 5.,
-            dimension: ShapeDimension::Volume,
-            speed: 2.0.into(),
+            // radius: 1.,
+
+            // dimension: ShapeDimension::Volume,
+            dimension: ShapeDimension::Surface,
+            speed: 1.0.into(),
         })
+        // .init(PositionSphereModifier {
+        //     center: Vec3::ZERO,
+        //     // radius: 5.,
+        //     radius: 1.,
+        //     // dimension: ShapeDimension::Volume,
+        //     dimension: ShapeDimension::Surface,
+        //     speed: 2.0.into(),
+        // })
         .update(AccelModifier {
-            accel: Vec3::new(0., 5., 0.),
+            // accel: Vec3::new(0., 5., 0.),
+            accel: Vec3::new(1., 5., 0.),
         })
         .render(ColorOverLifetimeModifier {
             gradient: gradient3,
+        })
+        .render(SizeOverLifetimeModifier {
+            gradient: size_gradient3,
         }),
     );
 
     commands
         .spawn()
         .insert(Name::new("emit:burst"))
+        .insert(EntityInfo{direction:0,timer: Timer::from_seconds(4., true)})
         .insert_bundle(ParticleEffectBundle {
             effect: ParticleEffect::new(effect3),
             transform: Transform::from_translation(Vec3::new(30., 0., 0.)),
             ..Default::default()
-        })
-        .with_children(|p| {
-            // Reference cube to visualize the emit origin
-            p.spawn()
-                .insert_bundle(PbrBundle {
-                    mesh: cube.clone(),
-                    material: mat.clone(),
-                    ..Default::default()
-                })
-                .insert(Name::new("source"));
         });
+    // .with_children(|p| {
+    //     // Reference cube to visualize the emit origin
+    //     p.spawn()
+    //         .insert_bundle(PbrBundle {
+    //             // mesh: cube.clone(),
+    //             mesh: meshes.add(Mesh::from(Cube { size: 0.1 })),
+    //             material: mat.clone(),
+    //             ..Default::default()
+    //         })
+    //         .insert(Name::new("source"));
+    // });
+}
+use bevy::ecs::prelude::*;
+pub use bevy_hanabi::ParticleEffect;
+
+#[derive(Component)]
+pub struct EntityInfo {
+    pub direction: i32,
+    pub timer: Timer,
+}
+
+fn update(
+    mut effects: ResMut<Assets<EffectAsset>>,
+    mut commands: Commands,
+    mut query: Query<(Entity, &Name,&mut EntityInfo, &ParticleEffect)>,
+    time: Res<Time>,
+) {
+    const ACCELERATION: f32 = 1.0;
+    // let direction = (time.delta_seconds() % 4.0) as i32;
+    // for value in effect.iter_mut() {
+    //     let mut eff = value.as_mut();
+
+    // }
+    // let iter = effect.iter_mut();
+    for (mut entity, name,mut info, effect) in query.iter_mut() {
+        if name.eq(&"emit:burst".into()) && info.timer.tick(time.delta()).just_finished() {
+            let direction = info.direction;
+            // println!("entity {:?} name : {:?} effect {:?}", entity, name, effect);
+            // let clone_handle =  effect.handle.clone_weak();
+            let mut effect_instance = effects.get_mut(&effect.handle).unwrap();
+            let accel = match direction {
+                0 => Vec3::new(0.0, 5.0, 0.0),
+                1 => Vec3::new(5.0, 0.0, 0.0),
+                2 => Vec3::new(0.0, -5.0, 0.0),
+                3 => Vec3::new(-5.0, 0.0, 0.0),
+                _ => Vec3::ZERO,
+            };
+            effect_instance.update_mut_ref(AccelModifier {
+                // accel: Vec3::new(0., 5., 0.),
+                accel,
+            });
+            info.direction +=1;
+            if info.direction > 3{
+                info.direction = 0;
+            }
+        }
+    }
+    // let mut effect = effect.iter_mut()
+    // effect
+    //     .maybe_spawner()
+    //     .unwrap()
+    //     .set_active(transform.translation.y < 0.0);
 }

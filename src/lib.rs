@@ -197,7 +197,7 @@ impl ToWgslString for Value<f32> {
 #[uuid = "c48df8b5-7eca-4d25-831e-513c2575cf6c"]
 pub struct ParticleEffect {
     /// Handle of the effect to instantiate.
-    handle: Handle<EffectAsset>,
+    pub handle: Handle<EffectAsset>,
     /// Internal effect cache ID of the effect once allocated.
     effect: EffectCacheId,
     /// Particle spawning descriptor.
