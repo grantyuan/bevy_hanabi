@@ -77,7 +77,7 @@ impl EffectAsset {
     }
     
     /// dynimally init modifier of the effect.
-    pub fn init_mut_ref<M: InitModifier + Send + Sync + 'static>(mut self, modifier: M) -> Self {
+    pub fn init_mut_ref<M: InitModifier + Send + Sync + 'static>(&mut self, modifier: M) -> &mut Self {
         modifier.apply(&mut self.init_layout);
         //self.modifiers.push(Box::new(modifier));
         self
