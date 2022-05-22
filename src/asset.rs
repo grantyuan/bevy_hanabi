@@ -75,6 +75,13 @@ impl EffectAsset {
         //self.modifiers.push(Box::new(modifier));
         self
     }
+    
+    /// dynimally init modifier of the effect.
+    pub fn init_mut_ref<M: InitModifier + Send + Sync + 'static>(mut self, modifier: M) -> Self {
+        modifier.apply(&mut self.init_layout);
+        //self.modifiers.push(Box::new(modifier));
+        self
+    }
 
     /// Add an update modifier to the effect.
     pub fn update<M: UpdateModifier + Send + Sync + 'static>(mut self, modifier: M) -> Self {
@@ -84,8 +91,16 @@ impl EffectAsset {
     }
 
     /// dynimally update modifier of the effect.
-    pub fn update_mut_ref<M: UpdateModifier + Send + Sync + 'static>(&mut self, modifier: M) {
-        modifier.apply(&mut self.update_layout);        
+    pub fn update_mut_ref<M: UpdateModifier + Send + Sync + 'static>(&mut self, modifier: M)->&mut Self {
+        modifier.apply(&mut self.update_layout); 
+        self       
+    }
+
+     /// dynimally update  render modifier of the effect.
+    pub fn render_mut_ref<M: RenderModifier + Send + Sync + 'static>(&mut self, modifier: M) -> &mut Self {
+        modifier.apply(&mut self.render_layout);
+        //self.modifiers.push(Box::new(modifier));
+        self
     }
 
     /// Add a render modifier to the effect.
