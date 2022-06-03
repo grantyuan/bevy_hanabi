@@ -102,7 +102,7 @@ pub use modifiers::{
     ShapeDimension, SizeOverLifetimeModifier, UpdateModifier, FFNUM,
 };
 pub use plugin::HanabiPlugin;
-pub use render::EffectCacheId;
+pub use render::{EffectCacheId,AppearAreaInfo};
 pub use spawn::{Spawner, Value};
 
 #[cfg(not(any(feature = "2d", feature = "3d")))]
@@ -225,7 +225,7 @@ impl ParticleEffect {
     /// adding modifiers to the effect.
     pub fn spawner(&mut self, spawner: &Spawner) -> &mut Spawner {
         if self.spawner.is_none() {
-            self.spawner = Some(*spawner);
+            self.spawner = Some(spawner.clone());
         }
         self.spawner.as_mut().unwrap()
     }

@@ -54,6 +54,8 @@ pub struct EffectAsset {
     pub capacity: u32,
     /// Spawner.
     pub spawner: Spawner,
+
+    // pub particleAppearAreaBuffer
     ///
     #[serde(skip)] // TODO
     pub init_layout: InitLayout,

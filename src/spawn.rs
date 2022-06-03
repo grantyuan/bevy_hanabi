@@ -1,9 +1,13 @@
+
+
 use rand::{
     distributions::{uniform::SampleUniform, Distribution, Uniform},
     SeedableRng,
 };
 use rand_pcg::Pcg32;
 use serde::{Deserialize, Serialize};
+
+use crate::render::AppearAreaInfo;
 
 /// An RNG to be used in the CPU for the particle system engine
 pub(crate) fn new_rng() -> Pcg32 {
@@ -65,8 +69,9 @@ impl<T: Copy> From<T> for Value<T> {
 }
 
 /// Spawner defining how new particles are created.
-#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
-pub struct Spawner {
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Spawner{
+    
     /// Number of particles to spawn over `spawn_time`
     num_particles: Value<f32>,
 
@@ -92,7 +97,13 @@ pub struct Spawner {
 
     /// Whether the system is active
     active: bool,
+
+    appear_areas:Vec<AppearAreaInfo>
 }
+
+// impl Copy for Box<Vec<AppearAreaInfo>> {
+    
+// }
 
 impl Default for Spawner {
     fn default() -> Self {
@@ -100,7 +111,7 @@ impl Default for Spawner {
     }
 }
 
-impl Spawner {
+impl Spawner{
     /// Create a spawner with a given count, time, and period.
     ///
     /// - `count` is the number of particles to spawn over `time` in a burst
@@ -127,6 +138,7 @@ impl Spawner {
             limit: 0.,
             spawn: 0.,
             active: true,
+            appear_areas:Vec::new(),          
         }
     }
 
@@ -166,6 +178,16 @@ impl Spawner {
         self.time = 0.;
         self.limit = 0.;
         self.spawn = 0.;
+    }
+
+    /// get appear areas 
+    pub fn get_appear_areas(&self)-> Vec<AppearAreaInfo>{
+        self.appear_areas.clone()
+    }
+
+    /// Sets all particles present areas
+    pub fn set_appear_areas(&mut self, appear_areas: Vec<AppearAreaInfo>) {
+        self.appear_areas = appear_areas;
     }
 
     /// Sets whether the spawner is active.

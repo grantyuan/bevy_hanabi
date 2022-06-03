@@ -51,12 +51,33 @@ fn setup(
     gradient.add_key(0.1, Vec4::new(1.0, 1.0, 0.0, 1.0));
     gradient.add_key(0.4, Vec4::new(1.0, 0.0, 0.0, 1.0));
     gradient.add_key(1.0, Vec4::splat(0.0));
-
+    let spawner = Spawner::rate(1000.0.into());
     let effect = effects.add(
         EffectAsset {
             name: "Gradient".to_string(),
             capacity: 32768,
-            spawner: Spawner::rate(1000.0.into()),
+            spawner: spawner.clone(),
+            ..Default::default()
+        }
+        .render(ParticleTextureModifier {
+            texture: texture_handle.clone(),
+        })
+        .render(ColorOverLifetimeModifier {
+            gradient: gradient.clone(),
+        }),
+    );
+
+    commands
+        .spawn()
+        .insert(Name::new("effect"))
+        .insert_bundle(ParticleEffectBundle::new(effect).with_spawner(spawner.clone()));
+
+    // let spawner = Spawner::rate(100.0.into());
+    let effect = effects.add(
+        EffectAsset {
+            name: "Gradient1".to_string(),
+            capacity: 32768,
+            spawner: spawner.clone(),
             ..Default::default()
         }
         .render(ParticleTextureModifier {
@@ -64,18 +85,10 @@ fn setup(
         })
         .render(ColorOverLifetimeModifier { gradient }),
     );
-
     commands
         .spawn()
-        .insert(Name::new("effect"))
-        .insert_bundle(ParticleEffectBundle::new(effect))
-        .with_children(|p| {
-            p.spawn().insert_bundle(PbrBundle {
-                mesh: meshes.add(Mesh::from(Cube { size: 1.0 })),
-                material: materials.add(Color::RED.into()),
-                ..Default::default()
-            });
-        });
+        .insert(Name::new("effect1"))
+        .insert_bundle(ParticleEffectBundle::new(effect).with_spawner(spawner.clone()));
 }
 
 /// Calculate a position over a Lemniscate of Bernoulli curve ("infinite symbol").
@@ -124,15 +137,36 @@ fn lemniscate(time: f32, radius: f32) -> Vec2 {
     Vec2::new(x, y)
 }
 
-fn update(time: Res<Time>, mut query: Query<&mut Transform, With<ParticleEffect>>) {
+fn update(time: Res<Time>, mut query: Query<(&Name, &mut ParticleEffect)>) {
     const ALPHA_OFFSET: f32 = PI * 0.41547;
     const SPEED_OFFSET: f32 = 2.57;
     let mut alpha_off = 0.0;
     let mut speed = 4.25;
-    for mut transform in query.iter_mut() {
+    for (mut name, mut effect) in query.iter_mut() {
         let alpha = time.seconds_since_startup() as f32 * PI / speed + alpha_off;
-        let radius = 50.0;
-        transform.translation = lemniscate(alpha, radius).extend(0.0);
+        let mut radius = 25.0;
+        // transform.translation =
+        let mut count = 5;
+        if name.to_string() == "effect1" {
+            count = 10;
+        }
+        let mut appear_areas = Vec::new();
+        for i in 1..count {
+            radius = radius * 1.2;
+            let mut pos = lemniscate(alpha, radius).extend(0.0);
+
+            appear_areas.push(AppearAreaInfo {
+                position: pos,
+                flow_direction: pos * 1.0,
+                flow_speed: pos.x * 0.1,
+            });
+        }
+
+        effect
+            .maybe_spawner()
+            .unwrap()
+            .set_appear_areas(appear_areas);
+
         alpha_off += ALPHA_OFFSET;
         speed += SPEED_OFFSET;
     }

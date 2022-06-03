@@ -63,8 +63,8 @@ mod tests {
     #[test]
     fn bundle_with_spawner() {
         let spawner = Spawner::once(5.0.into(), true);
-        let mut bundle = ParticleEffectBundle::default().with_spawner(spawner);
+        let mut bundle = ParticleEffectBundle::default().with_spawner(spawner.clone());
         assert!(bundle.effect.maybe_spawner().is_some());
-        assert_eq!(*bundle.effect.maybe_spawner().unwrap(), spawner);
+        assert_eq!(bundle.effect.maybe_spawner().unwrap().clone(), spawner);
     }
 }

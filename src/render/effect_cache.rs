@@ -13,7 +13,7 @@ use bevy::{
         render_asset::RenderAssets,
         render_graph::{Node, NodeRunError, RenderGraphContext, SlotInfo, SlotType},
         render_phase::{Draw, DrawFunctions, RenderPhase, TrackedRenderPass},
-        render_resource::{std140::AsStd140, *},
+        render_resource::{std140::AsStd140, std430::AsStd430, *},
         renderer::{RenderContext, RenderDevice, RenderQueue},
         texture::{BevyDefault, Image},
         view::{ComputedVisibility, ExtractedView, ViewUniform, ViewUniformOffset, ViewUniforms},
@@ -32,7 +32,11 @@ use std::{
     sync::atomic::{AtomicU64, Ordering as AtomicOrdering},
 };
 
-use crate::{asset::EffectAsset, render::Particle, ParticleEffect};
+use crate::{
+    asset::EffectAsset,
+    render::{Particle, ParticleAppearArea},
+    ParticleEffect,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EffectSlice {
@@ -106,7 +110,7 @@ struct BestRange {
 impl EffectBuffer {
     /// Minimum buffer capacity to allocate, in number of particles.
     pub const MIN_CAPACITY: u32 = 65536; // at least 64k particles
-
+    const MAX_APPEAR_AREA: u64 = 1024;
     /// Create a new group and a GPU buffer to back it up.
     pub fn new(
         asset: Handle<EffectAsset>,
@@ -142,6 +146,7 @@ impl EffectBuffer {
             usage: BufferUsages::COPY_DST | BufferUsages::STORAGE,
             mapped_at_creation: false,
         });
+
         EffectBuffer {
             particle_buffer,
             indirect_buffer,
@@ -163,7 +168,9 @@ impl EffectBuffer {
     pub fn indirect_buffer(&self) -> &Buffer {
         &self.indirect_buffer
     }
-
+    // pub fn appear_area_buffer(&self) -> &Buffer {
+    //     &self.appear_area_buffer
+    // }
     pub fn capacity(&self) -> u32 {
         self.capacity
     }
@@ -224,16 +231,51 @@ impl EffectBuffer {
         Some(result.range)
     }
 
+    // /// Allocate a new slice in the buffer to store the particles of a single effect.
+    // pub fn allocate_appear_area_slice(&mut self, capacity: u32, appear_area_item_size: u32) -> Option<SliceRef> {
+    //     trace!(
+    //         "EffectBuffer::allocate_slice: capacity={} item_size={}",
+    //         capacity,
+    //         appear_area_item_size
+    //     );
+
+    //     let byte_size = capacity
+    //         .checked_mul(appear_area_item_size)
+    //         .expect("Effect slice size overflow");
+
+    //     let range = if let Some(range) = self.pop_free_slice(capacity) {
+    //         range
+    //     } else {
+    //         let new_size = self.used_size.checked_add(capacity).unwrap();
+    //         if new_size <= self.capacity {
+    //             let range = self.used_size..new_size;
+    //             self.used_size = new_size;
+    //             range
+    //         } else {
+    //             if self.used_size == 0 {
+    //                 warn!("Cannot allocate slice of size {} ({} B) in effect cache buffer of capacity {}.", capacity, byte_size, self.capacity);
+    //             }
+    //             return None;
+    //         }
+    //     };
+
+    //     Some(SliceRef { range, item_size: appear_area_item_size })
+    // }
+
     /// Allocate a new slice in the buffer to store the particles of a single effect.
-    pub fn allocate_slice(&mut self, capacity: u32, item_size: u32) -> Option<SliceRef> {
+    pub fn allocate_particle_slice(
+        &mut self,
+        capacity: u32,
+        particle_item_size: u32,
+    ) -> Option<SliceRef> {
         trace!(
             "EffectBuffer::allocate_slice: capacity={} item_size={}",
             capacity,
-            item_size
+            particle_item_size
         );
 
         let byte_size = capacity
-            .checked_mul(item_size)
+            .checked_mul(particle_item_size)
             .expect("Effect slice size overflow");
 
         let range = if let Some(range) = self.pop_free_slice(capacity) {
@@ -252,7 +294,10 @@ impl EffectBuffer {
             }
         };
 
-        Some(SliceRef { range, item_size })
+        Some(SliceRef {
+            range,
+            item_size: particle_item_size,
+        })
     }
 
     // pub fn write_slice(&mut self, slice: &SliceRef, data: &[u8], queue: &RenderQueue) {
@@ -287,22 +332,22 @@ pub struct EffectCache {
     /// Render device the GPU resources (buffers) are allocated from.
     device: RenderDevice,
     /// Collection of effect buffers managed by this cache.
-    buffers: Vec<EffectBuffer>,
+    effect_buffers: Vec<EffectBuffer>,
     /// Map from an effect cache ID to the index of the buffer and the slice into that buffer.
-    effects: HashMap<EffectCacheId, (usize, SliceRef)>,
+    effect_data_mappings_in_buffer: HashMap<EffectCacheId, (usize, SliceRef)>,
 }
 
 impl EffectCache {
     pub fn new(device: RenderDevice) -> Self {
         EffectCache {
             device,
-            buffers: vec![],
-            effects: HashMap::default(),
+            effect_buffers: vec![],
+            effect_data_mappings_in_buffer: HashMap::default(),
         }
     }
 
     pub fn buffers(&self) -> &[EffectBuffer] {
-        &self.buffers
+        &self.effect_buffers
     }
 
     pub fn insert(
@@ -314,24 +359,24 @@ impl EffectCache {
         _queue: &RenderQueue,
     ) -> EffectCacheId {
         let (buffer_index, slice) = self
-            .buffers
+            .effect_buffers
             .iter_mut()
             .enumerate()
-            .find_map(|(buffer_index, buffer)| {
+            .find_map(|(buffer_index, effect_buffer)| {
                 // The buffer must be compatible with the effect layout, to allow the update pass
                 // to update all particles at once from all compatible effects in a single dispatch.
-                if !buffer.is_compatible(&asset) {
+                if !effect_buffer.is_compatible(&asset) {
                     return None;
                 }
 
                 // Try to allocate a slice into the buffer
-                buffer
-                    .allocate_slice(capacity, item_size)
+                effect_buffer
+                    .allocate_particle_slice(capacity, item_size)
                     .map(|slice| (buffer_index, slice))
             })
             .or_else(|| {
                 // Cannot find any suitable buffer; allocate a new one
-                let buffer_index = self.buffers.len();
+                let buffer_index = self.effect_buffers.len();
                 let byte_size = capacity.checked_mul(item_size).unwrap_or_else(|| panic!(
                     "Effect size overflow: capacity={} item_size={}",
                     capacity, item_size
@@ -344,18 +389,18 @@ impl EffectCache {
                     item_size,
                     byte_size
                 );
-                self.buffers.push(EffectBuffer::new(
+                self.effect_buffers.push(EffectBuffer::new(
                     asset,
                     capacity,
                     item_size,
                     //pipeline,
                     &self.device,
-                    Some(&format!("effect_buffer{}", self.buffers.len())),
+                    Some(&format!("effect_buffer{}", self.effect_buffers.len())),
                 ));
-                let buffer = self.buffers.last_mut().unwrap();
+                let new_effect_buffer = self.effect_buffers.last_mut().unwrap();
                 Some((
                     buffer_index,
-                    buffer.allocate_slice(capacity, item_size).unwrap(),
+                    new_effect_buffer.allocate_particle_slice(capacity, item_size).unwrap(),
                 ))
             })
             .unwrap();
@@ -367,12 +412,13 @@ impl EffectCache {
             slice.range,
             slice.item_size
         );
-        self.effects.insert(id, (buffer_index, slice));
+        self.effect_data_mappings_in_buffer
+            .insert(id, (buffer_index, slice));
         id
     }
 
     pub fn get_slice(&self, id: EffectCacheId) -> EffectSlice {
-        self.effects
+        self.effect_data_mappings_in_buffer
             .get(&id)
             .map(|(buffer_index, slice_ref)| EffectSlice {
                 slice: slice_ref.range.clone(),

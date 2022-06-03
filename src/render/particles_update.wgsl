@@ -5,6 +5,19 @@ struct Particle {
     lifetime: f32;
 };
 
+struct ParticleAppearArea {    
+    position: vec3<f32>; 
+    _pod0:f32;
+    flow_direction:vec3<f32>;
+    flow_speed:f32;
+};
+
+struct ParticleAppearAreaBuffer{
+    // particleAppearAreas:[[stride(32)]] array<ParticleAppearArea>;
+
+    particleAppearAreas:[[stride(32)]] array<ParticleAppearArea>;
+};
+
 struct ParticleBuffer {
     particles: [[stride(32)]] array<Particle>;
 };
@@ -31,7 +44,7 @@ struct Spawner {
     force_field: array<ForceFieldParam, 16>;
     __pad0: vec3<f32>;
     seed: u32;
-    __pad1: vec4<f32>;
+    __pad1: vec4<f32>;    
 };
 
 struct IndirectBuffer {
@@ -42,6 +55,7 @@ struct IndirectBuffer {
 [[group(1), binding(0)]] var<storage, read_write> particle_buffer : ParticleBuffer;
 [[group(2), binding(0)]] var<storage, read_write> spawner : Spawner;
 [[group(3), binding(0)]] var<storage, read_write> indirect_buffer : IndirectBuffer;
+[[group(4), binding(0)]] var<storage, read> appear_area_buffer : ParticleAppearAreaBuffer;
 
 var<private> seed : u32 = 0u;
 
@@ -111,7 +125,10 @@ struct PosVel {
 
 fn init_pos_vel(index: u32) -> PosVel {
     var ret : PosVel;
+    var speed: f32 = appear_area_buffer.particleAppearAreas[index].flow_speed;
+
 {{INIT_POS_VEL}}
+
     return ret;
 }
 
@@ -123,20 +140,27 @@ fn proj(u: vec3<f32>, v: vec3<f32>) -> vec3<f32> {
     return dot(v, u) / dot(u,u) * u;
 }
 
+// var<private> my_test_value:f32;
 
 [[stage(compute), workgroup_size(64)]]
 fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
     let max_particles : u32 = arrayLength(&particle_buffer.particles);
+    let max_appear_areas : u32 = arrayLength(&appear_area_buffer.particleAppearAreas);
+    if (max_appear_areas == u32(0)) {
+        return;
+    }
     let index = global_invocation_id.x;
     if (index >= max_particles) {
         return;
     }
-
+    let appear_area_index = index%max_appear_areas;
     var vPos : vec3<f32> = particle_buffer.particles[index].pos;
     var vVel : vec3<f32> = particle_buffer.particles[index].vel;
     var vAge : f32 = particle_buffer.particles[index].age;
     var vLifetime : f32 = particle_buffer.particles[index].lifetime;
-
+    var appear_area_pos: vec3<f32> = appear_area_buffer.particleAppearAreas[appear_area_index].position;
+    var direction: vec3<f32> = appear_area_buffer.particleAppearAreas[appear_area_index].flow_direction;
+    var speed: f32 = appear_area_buffer.particleAppearAreas[appear_area_index].flow_speed;
     // Age the particle
     vAge = vAge + sim_params.dt;
     if (vAge >= vLifetime) {
@@ -146,8 +170,10 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
             seed = pcg_hash(index ^ spawner.seed);
 
             // Initialize new particle
-            var posVel = init_pos_vel(index);
-            vPos = posVel.pos + spawner.origin;
+            var posVel = init_pos_vel(appear_area_index);
+  
+            vPos = (posVel.pos + appear_area_pos + spawner.origin);
+
             vVel = posVel.vel;
             vAge = 0.0;
             vLifetime = init_lifetime();
