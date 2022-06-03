@@ -147,9 +147,7 @@ fn update(time: Res<Time>, mut query: Query<(&Name, &mut ParticleEffect)>) {
         let mut radius = 25.0;
         // transform.translation =
         let mut count = 5;
-        if name.to_string() == "effect1" {
-            count = 10;
-        }
+       
         let mut appear_areas = Vec::new();
         for i in 1..count {
             radius = radius * 1.2;
@@ -161,11 +159,12 @@ fn update(time: Res<Time>, mut query: Query<(&Name, &mut ParticleEffect)>) {
                 flow_speed: pos.x * 0.1,
             });
         }
-
-        effect
+        if name.to_string() == "effect1" {
+            effect
             .maybe_spawner()
             .unwrap()
             .set_appear_areas(appear_areas);
+        }
 
         alpha_off += ALPHA_OFFSET;
         speed += SPEED_OFFSET;

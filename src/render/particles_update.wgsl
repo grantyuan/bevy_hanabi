@@ -7,7 +7,7 @@ struct Particle {
 
 struct ParticleAppearArea {    
     position: vec3<f32>; 
-    _pod0:f32;
+    actived:i32;
     flow_direction:vec3<f32>;
     flow_speed:f32;
 };
@@ -146,9 +146,16 @@ fn proj(u: vec3<f32>, v: vec3<f32>) -> vec3<f32> {
 fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
     let max_particles : u32 = arrayLength(&particle_buffer.particles);
     let max_appear_areas : u32 = arrayLength(&appear_area_buffer.particleAppearAreas);
+    
     if (max_appear_areas == u32(0)) {
         return;
     }
+
+    if (max_appear_areas == u32(1) && appear_area_buffer.particleAppearAreas[0].actived == i32(-1))
+    {
+        return;
+    }
+
     let index = global_invocation_id.x;
     if (index >= max_particles) {
         return;
