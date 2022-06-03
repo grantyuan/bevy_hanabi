@@ -115,6 +115,7 @@ impl InitModifier for PositionCircleModifier {
     }
 }
 
+/// Postison Modifier
 #[derive(Clone, Copy)]
 pub struct PositionModifier {
     /// The center, relative to the emitter position.
@@ -193,7 +194,7 @@ pub struct PositionSphereModifier {
     /// The sphere radius.
     pub radius: f32,
     /// The radial speed of the particles on spawn.
-    pub speed: Value<f32>,
+    // pub speed: Value<f32>,
     /// The shape dimension to spawn from.
     pub dimension: ShapeDimension,
 }
@@ -222,8 +223,7 @@ impl InitModifier for PositionSphereModifier {
     let c = {0};
     // Sphere radius
     {1}
-    // Radial speed
-    let speed = {2};
+   
     // Spawn randomly along the sphere surface using Archimedes's theorem
     var theta = rand() * tau;
     var z = rand() * 2. - 1.;
@@ -239,7 +239,7 @@ impl InitModifier for PositionSphereModifier {
 "##,
             self.center.to_wgsl_string(),
             radius_code,
-            self.speed.to_wgsl_string()
+            // self.speed.to_wgsl_string()
         );
     }
 }
