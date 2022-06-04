@@ -1359,7 +1359,7 @@ pub(crate) fn prepare_effects(
         // Prepare the spawner block for the current slice
         // FIXME - This is once per EFFECT/SLICE, not once per BATCH, so indeed this is spawner_BASE, and need an array of them in the compute shader!!!!!!!!!!!!!!
         let spawner_params = SpawnerParams {
-            spawn: extracted_effect.spawn_count as i32,
+            spawn: (extracted_effect.spawn_count * appear_areas_item_count) as i32,
             count: 0,
             origin: extracted_effect.transform.col(3).truncate(),
             accel: extracted_effect.accel,
