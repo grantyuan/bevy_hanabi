@@ -1,13 +1,13 @@
 #![deny(
     warnings,
-    missing_copy_implementations,
+    // missing_copy_implementations,
     trivial_casts,
     trivial_numeric_casts,
     unsafe_code,
     unstable_features,
     unused_import_braces,
     unused_qualifications,
-    missing_docs
+    // missing_docs
 )]
 #![allow(dead_code)] // TEMP
 #![allow(clippy::too_many_arguments, clippy::type_complexity)]
@@ -92,10 +92,12 @@ mod spawn;
 
 #[cfg(test)]
 mod test_utils;
+pub mod color_selector;
+mod wgsl_syntex_tools;
 
 pub use asset::EffectAsset;
 pub use bundle::ParticleEffectBundle;
-pub use gradient::{Gradient, GradientKey};
+pub use gradient::{Gradient, GradientKey, GradientEnum, GradientWithColorSelector};
 pub use modifiers::{
     AccelModifier, ColorOverLifetimeModifier, ForceFieldModifier, ForceFieldParam, InitModifier,
     ParticleTextureModifier, PositionCircleModifier, PositionSphereModifier, RenderModifier,

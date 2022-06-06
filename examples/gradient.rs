@@ -3,9 +3,9 @@ use bevy::{
     render::{mesh::shape::Cube, render_resource::WgpuFeatures, settings::WgpuSettings},
 };
 //use bevy_inspector_egui::WorldInspectorPlugin;
-use std::f32::consts::PI;
+use std::{f32::consts::PI, borrow::BorrowMut};
 
-use bevy_hanabi::*;
+use bevy_hanabi::{*, color_selector::{Indicator, ValueRange}};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut options = WgpuSettings::default();
@@ -46,12 +46,24 @@ fn setup(
 
     let texture_handle: Handle<Image> = asset_server.load("cloud.png");
 
-    let mut gradient = Gradient::new();
-    gradient.add_key(0.0, Vec4::splat(1.0));
-    gradient.add_key(0.1, Vec4::new(1.0, 1.0, 0.0, 1.0));
-    gradient.add_key(0.4, Vec4::new(1.0, 0.0, 0.0, 1.0));
-    gradient.add_key(1.0, Vec4::splat(0.0));
-    let spawner = Spawner::rate(1000.0.into());
+    // let selector = color_selector::Gr::<Vec4>::new(Indicator::SPEED);
+    let mut selector = GradientWithColorSelector::new(Indicator::SPEED);
+    // GradientWithColorSelector<Vec4>
+
+
+    selector.color_selector.add_range(ValueRange{start:0.1,end:5.0}, Vec4::splat(0.5));
+    // gradient.add_key(0.0, Vec4::splat(1.0));
+    selector.gradient.add_key(0.5, Vec4::splat(1.0));
+    selector.gradient.add_key(0.5, Vec4::splat(1.0));
+    selector.gradient.add_key(0.5, Vec4::splat(1.0));
+    selector.gradient.add_key(0.5, Vec4::splat(1.0));
+    selector.gradient.add_key(0.5, Vec4::splat(1.0));
+    // gradient.add_key(0.1, Vec4::new(1.0, 1.0, 0.0, 1.0));
+    selector.gradient.add_key(0.4, Vec4::new(1.0, 0.0, 0.0, 1.0));
+    selector.gradient.add_key(1.0, Vec4::splat(0.0));
+    let mut gradient = GradientEnum::ColorSelector::<Vec4>(selector);
+    let mut spawner = Spawner::rate(1000.0.into());
+    spawner.set_particles_live_time(2.0);
     let effect = effects.add(
         EffectAsset {
             name: "Gradient".to_string(),

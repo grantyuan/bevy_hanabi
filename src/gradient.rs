@@ -4,6 +4,8 @@ use bevy::{
 };
 use std::vec::Vec;
 
+use crate::color_selector::{ColorSelector, Indicator};
+
 /// Describes a type that can be linearly interpolated between two keys.
 ///
 /// This trait is used for values in a gradient, which are primitive types and are
@@ -80,6 +82,36 @@ impl<T: Lerp> GradientKey<T> {
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Gradient<T: Lerp> {
     keys: Vec<GradientKey<T>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct GradientWithColorSelector<T: Lerp> {
+    pub color_selector: ColorSelector<T>,
+    pub gradient: Gradient<T>,
+}
+
+// impl<T: Lerp> Default for GradientWithColorSelector<T> {
+//     fn default() -> Self {
+//         Self { color_selector: Default::default(), gradient: Default::default() }
+//     }
+// }
+
+impl<T: Default + Lerp> GradientWithColorSelector<T> {
+    pub fn new(depend_var_name: Indicator) -> Self {
+        //    let mut gradient: Gradient<T>
+        let instance = Self {
+            color_selector: ColorSelector::new(depend_var_name),
+            gradient: Gradient::<T>::default(),
+        };
+        instance
+        // instance.gradient.
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum GradientEnum<T: Lerp> {
+    Gradient(Gradient<T>),
+    ColorSelector(GradientWithColorSelector<T>),
 }
 
 impl<T: Default + Lerp> Gradient<T> {

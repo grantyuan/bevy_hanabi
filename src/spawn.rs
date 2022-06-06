@@ -1,5 +1,3 @@
-
-
 use rand::{
     distributions::{uniform::SampleUniform, Distribution, Uniform},
     SeedableRng,
@@ -70,8 +68,7 @@ impl<T: Copy> From<T> for Value<T> {
 
 /// Spawner defining how new particles are created.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct Spawner{
-    
+pub struct Spawner {
     /// Number of particles to spawn over `spawn_time`
     num_particles: Value<f32>,
 
@@ -82,6 +79,9 @@ pub struct Spawner{
     /// If this is infinity, there's only one burst.
     /// If this is `spawn_time`, the system spawns a steady stream of particles.
     period: Value<f32>,
+
+    /// Particles live time
+    live_time: f32,
 
     /// Time since last spawn.
     time: f32,
@@ -98,11 +98,11 @@ pub struct Spawner{
     /// Whether the system is active
     active: bool,
 
-    appear_areas:Vec<AppearAreaInfo>
+    appear_areas: Vec<AppearAreaInfo>,
 }
 
 // impl Copy for Box<Vec<AppearAreaInfo>> {
-    
+
 // }
 
 impl Default for Spawner {
@@ -111,7 +111,7 @@ impl Default for Spawner {
     }
 }
 
-impl Spawner{
+impl Spawner {
     /// Create a spawner with a given count, time, and period.
     ///
     /// - `count` is the number of particles to spawn over `time` in a burst
@@ -137,9 +137,16 @@ impl Spawner{
             curr_spawn_time: 0.,
             limit: 0.,
             spawn: 0.,
+            live_time: 5.0,
             active: true,
-            appear_areas:Vec::new(),          
+            appear_areas: Vec::new(),
         }
+    }
+
+    /// set particles live time
+    pub fn set_particles_live_time(&mut self, live_time:f32)->&Self{
+        self.live_time = live_time;
+        self
     }
 
     /// Sets whether the spawner starts active.
@@ -180,8 +187,8 @@ impl Spawner{
         self.spawn = 0.;
     }
 
-    /// get appear areas 
-    pub fn get_appear_areas(&self)-> Vec<AppearAreaInfo>{
+    /// get appear areas
+    pub fn get_appear_areas(&self) -> Vec<AppearAreaInfo> {
         self.appear_areas.clone()
     }
 
@@ -244,6 +251,10 @@ impl Spawner{
         let count = self.spawn.floor();
         self.spawn -= count;
         count as u32
+    }
+
+    pub(crate) fn get_particles_live_time(&self) -> f32 {
+       self.live_time 
     }
 }
 

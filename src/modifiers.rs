@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 use crate::{
     asset::{InitLayout, RenderLayout, UpdateLayout},
-    gradient::Gradient,
+    gradient::{Gradient, GradientEnum},
     ToWgslString, Value,
 };
 
@@ -258,10 +258,21 @@ impl RenderModifier for ParticleTextureModifier {
 }
 
 /// A modifier modulating each particle's color over its lifetime with a gradient curve.
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct ColorOverLifetimeModifier {
     /// The color gradient defining the particle color based on its lifetime.
-    pub gradient: Gradient<Vec4>,
+    pub gradient: GradientEnum<Vec4>,
+}
+
+impl ColorOverLifetimeModifier {
+    // init a gradient
+    pub fn new(gradient: GradientEnum<Vec4>) -> Self { Self { gradient } }    
+}
+
+impl Default for ColorOverLifetimeModifier {
+    fn default() -> Self {
+        Self { gradient: GradientEnum::Gradient(Default::default()) }
+    }
 }
 
 impl RenderModifier for ColorOverLifetimeModifier {
@@ -269,6 +280,7 @@ impl RenderModifier for ColorOverLifetimeModifier {
         render_layout.lifetime_color_gradient = Some(self.gradient.clone());
     }
 }
+
 
 /// A modifier modulating each particle's size over its lifetime with a gradient curve.
 #[derive(Default, Clone)]

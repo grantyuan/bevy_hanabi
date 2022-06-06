@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     modifiers::{ForceFieldParam, FFNUM},
-    Gradient, InitModifier, RenderModifier, Spawner, UpdateModifier,
+    Gradient, InitModifier, RenderModifier, Spawner, UpdateModifier, gradient::GradientEnum,
 };
 
 #[derive(Default, Clone)]
@@ -34,7 +34,8 @@ pub struct RenderLayout {
     /// shaders.
     pub particle_texture: Option<Handle<Image>>,
 
-    pub lifetime_color_gradient: Option<Gradient<Vec4>>,
+    pub lifetime_color_gradient: Option<GradientEnum<Vec4>>,
+    // pub lifetime_color_gradient: Option<Gradient<Vec4>>,
 
     pub size_color_gradient: Option<Gradient<Vec2>>,
 }

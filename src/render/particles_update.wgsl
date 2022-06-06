@@ -44,7 +44,8 @@ struct Spawner {
     force_field: array<ForceFieldParam, 16>;
     __pad0: vec3<f32>;
     seed: u32;
-    __pad1: vec4<f32>;    
+    __pad1: vec3<f32>;    
+    live_time:f32;
 };
 
 struct IndirectBuffer {
@@ -133,7 +134,7 @@ fn init_pos_vel(index: u32) -> PosVel {
 }
 
 fn init_lifetime() -> f32 {
-    return 5.0;
+    return spawner.live_time;
 }
 
 fn proj(u: vec3<f32>, v: vec3<f32>) -> vec3<f32> {

@@ -26,8 +26,12 @@ use bevy::{
 };
 use bitflags::bitflags;
 use bytemuck::cast_slice_mut;
+use quote::TokenStreamExt;
 use rand::random;
 use rand::Rng;
+       
+use syn::visit_mut::VisitMut;
+use proc_macro2::TokenStream;
 use std::{borrow::Cow, cmp::Ordering, num::NonZeroU64, ops::Range};
 use std::{
     num::NonZeroU32,
@@ -43,7 +47,7 @@ use crate::{
     asset::EffectAsset,
     modifiers::{ForceFieldParam, FFNUM},
     spawn::{new_rng, Random},
-    Gradient, ParticleEffect, ToWgslString,
+    Gradient, ParticleEffect, ToWgslString, color_selector::{ColorSelector, ValueRange}, gradient::{GradientEnum, GradientWithColorSelector}, wgsl_syntex_tools::NumberReplace,
 };
 
 mod aligned_buffer_vec;
@@ -106,6 +110,142 @@ pub enum EffectSystems {
 trait ShaderCode {
     /// Generate the shader code for the current state of the object.
     fn to_shader_code(&self) -> String;
+}
+
+impl ShaderCode for GradientWithColorSelector<Vec4> {
+    fn to_shader_code(&self) -> String {
+        // self.color_selector
+        // 1. defined the range and functions 
+        let var_name = match self.color_selector.depend_var_name {
+            crate::color_selector::Indicator::SPEED => "speed",
+            crate::color_selector::Indicator::SIZE => "size",
+            // crate::color_selector::Indicator::DIRECTION => "direction",
+        };
+        use quote::{quote,format_ident};
+        let depend_var_name = format_ident!("{}",var_name);
+        
+        
+       let mut final_code = TokenStream::new();
+
+       self.color_selector.range_values.clone().into_iter().enumerate().for_each(|(i,f)|{
+            let index  = i; 
+            let ValueRange{start,end} = f.0;
+            let value = f.1;
+            let [x,y,z,w] = value.to_array();
+            
+            let mut partial_code = quote!{
+                if (#depend_var_name >= #start && #depend_var_name < #end){
+                    // println("value inside {},{},{}",#index,#value,#ident_v);
+                    out.color = vec4<f32>(#x, #y, #z, #w);
+                }
+            };
+
+            if index < self.color_selector.range_values.len()-1 {
+                partial_code.append_all(quote!{
+                    else
+                });
+            }
+
+          final_code.append_all(partial_code);
+       });
+
+       trace!("code of color_selector {}", &final_code);
+
+              
+
+
+        // let mut s:String = String::New();
+
+        if self.gradient.keys().is_empty() {
+            
+            let expressions = correct_wrong_wgsl_syntax(quote!({#final_code}));
+            return quote!(#expressions).to_string();
+        }
+
+        // start color gradient 
+        final_code.append_all(quote!{
+            let t0 = 0.0;
+            let c0 = out.color;
+        });
+
+        self.gradient
+        .keys()
+        .iter()
+        .enumerate()
+        .for_each(|(index, key)| {
+            let ind = index+1;
+            let t = format_ident!("t{}",ind);
+            let c = format_ident!("c{}",ind);
+            let ratio = key.ratio();
+            let [x,y,z,w]= key.value.to_array();
+            // declare t1,t2,..,tn 
+            // declare c1,c2,..,cn
+            final_code.append_all(quote!{
+                let #t = #ratio;
+                let #c = vec4<f32>(#x, #y, #z, #w);
+            });
+        });
+
+        // if only one gradient and the ratio starts with 0.0 then no gradient can be used.
+        if self.gradient.keys().len() == 1 && self.gradient.keys()[0].ratio() == 0.0{
+            let expressions = correct_wrong_wgsl_syntax(quote!({#final_code}));
+            return quote!(#expressions).to_string();
+        }
+        
+
+        let code_step1 = quote!{
+            let life = particle.age / particle.lifetime;
+            if (life <= t0) {
+                    out.color = c0; 
+            }              
+        };
+       
+        let mut code_step2 = TokenStream::new();    
+
+        self.gradient
+        .keys()
+        .iter()                
+        .enumerate()
+        .for_each(|(index, _key)| {
+            let ind = index +1;
+            if ind == self.gradient.keys().len() {return;}
+            let t = format_ident!("t{}",ind);
+            let c = format_ident!("c{}",ind);
+            let t_next = format_ident!("t{}",ind+1);
+            let c_next = format_ident!("c{}",ind+1);
+            let code_else_if = quote!{
+                else if (life <= #t) {
+                    out.color = mix(#c, #c_next, (life - #t) / (#t_next - #t)); 
+                }                                    
+            };
+            code_step2.append_all(code_else_if);
+        });
+
+        let c_final = format_ident!("c{}",self.gradient.keys().len());
+        final_code.append_all(quote!{
+            // check t0
+            #code_step1
+            // else check t1, t2 .. tn-1
+            #code_step2
+            // else check tn
+            else { out.color = #c_final; }
+        });
+       trace!("code of final_code before filter expression {}", &final_code);
+    //    let mut expressions = syn::parse2(final_code).unwrap();
+    //    NumberReplace.visit_expr_mut(&mut expressions);
+
+       let expressions = correct_wrong_wgsl_syntax(quote!({#final_code}));
+       let final_code = quote!(#expressions);
+       trace!("code of color_selector {}", &final_code);
+
+       final_code.to_string()
+    }
+}
+
+fn correct_wrong_wgsl_syntax(final_code: TokenStream) -> syn::Block {
+    let mut expressions = syn::parse2(final_code).unwrap();
+    NumberReplace.visit_block_mut(&mut expressions);
+    expressions
 }
 
 impl ShaderCode for Gradient<Vec2> {
@@ -192,6 +332,16 @@ impl ShaderCode for Gradient<Vec4> {
     }
 }
 
+// impl ShaderCode for ColorSelector<Vec4> {
+//     fn to_shader_code(&self) -> String {
+//         let result = String::new();
+//         if self.depend_var_name.is_empty() {
+//            return "".to_string()
+//         }
+//         result
+//     }
+// }
+
 /// Simulation parameters.
 #[derive(Debug, Default, Clone, Copy)]
 pub(crate) struct SimParams {
@@ -276,7 +426,7 @@ struct SpawnerParams {
     ///
     __pad1: Vec3,
     ///
-    __pad2: f32,
+    live_time: f32,
 }
 
 pub struct ParticlesUpdatePipeline {
@@ -689,6 +839,10 @@ pub struct ExtractedEffect {
     pub transform: Mat4,
     /// Constant acceleration applied to all particles.
     pub accel: Vec3,
+
+    /// particle live time
+    pub particle_live_time:f32,
+
     /// Force field applied to all particles in the "update" phase.
     force_field: [ForceFieldParam; FFNUM],
     /// Particles tint to modulate with the texture image.
@@ -843,8 +997,8 @@ pub(crate) fn extract_effects(
             let spawner = effect.spawner(&asset.spawner);
 
             let appear_areas = spawner.get_appear_areas();
-
-            let spawn_count = spawner.tick(dt, &mut rng.0);
+            let particle_live_time = spawner.get_particles_live_time();
+            let spawn_count = spawner.tick(dt, &mut rng.0) * (appear_areas.len() as u32);
 
             // Extract the acceleration
             let accel = asset.update_layout.accel;
@@ -872,11 +1026,20 @@ pub(crate) fn extract_effects(
             // Generate the shader code for the color over lifetime gradient.
             // TODO - Move that to a pre-pass, not each frame!
             let mut vertex_modifiers =
-                if let Some(grad) = &asset.render_layout.lifetime_color_gradient {
-                    grad.to_shader_code()
-                } else {
-                    String::new()
+                // if let Some(grad) = &asset.render_layout.lifetime_color_gradient {
+                //     grad.to_shader_code()
+                // } else {
+                //     String::new()
+                // };
+                match &asset.render_layout.lifetime_color_gradient {
+                    Some(GradientEnum::ColorSelector(color_selector))=>
+                    color_selector.to_shader_code(),
+                    Some(GradientEnum::Gradient(gradient))=>
+                    gradient.to_shader_code()
+                    ,
+                    _ => String::new(),
                 };
+
             if let Some(grad) = &asset.render_layout.size_color_gradient {
                 vertex_modifiers += &grad.to_shader_code();
             }
@@ -905,10 +1068,10 @@ pub(crate) fn extract_effects(
                 ExtractedEffect {
                     handle: effect.handle.clone_weak(),
                     spawn_count,
-                    color: Color::RED, //effect.color,
                     transform: transform.compute_matrix(),
-                    accel,
+                    accel, //effect.color,
                     force_field,
+                    color: Color::RED,
                     rect: Rect {
                         left: -0.1,
                         top: -0.1,
@@ -927,6 +1090,7 @@ pub(crate) fn extract_effects(
                     position_code,
                     force_field_code,
                     appear_areas,
+                    particle_live_time,
                 },
             );
         }
@@ -944,7 +1108,7 @@ struct Particle {
     /// Particle velocity in effect space (local or world).
     pub velocity: [f32; 3],
     /// Total particle lifetime.
-    pub lifetime: f32,
+    pub lifetime: f32, 
 }
 
 /// the area to present particles
@@ -1359,12 +1523,13 @@ pub(crate) fn prepare_effects(
         // Prepare the spawner block for the current slice
         // FIXME - This is once per EFFECT/SLICE, not once per BATCH, so indeed this is spawner_BASE, and need an array of them in the compute shader!!!!!!!!!!!!!!
         let spawner_params = SpawnerParams {
-            spawn: (extracted_effect.spawn_count * appear_areas_item_count) as i32,
+            spawn: extracted_effect.spawn_count as i32,
             count: 0,
             origin: extracted_effect.transform.col(3).truncate(),
             accel: extracted_effect.accel,
             force_field: extracted_force_field, // extracted_effect.force_field,
             seed: random::<u32>(),
+            live_time: extracted_effect.particle_live_time,
             ..Default::default()
         };
         trace!("spawner_params = {:?}", spawner_params);
