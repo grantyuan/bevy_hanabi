@@ -59,7 +59,7 @@ fn vertex(
     //[[location(1)]] vertex_velocity: vec3<f32>,
 ) -> VertexOutput {
     var particle = particle_buffer.particles[instance_index];
-    var speed = sqrt(particle.vel.x * particle.vel.x + particle.vel.y * particle.vel.y +particle.vel.z * particle.vel.z);
+    
     var out: VertexOutput;
 #ifdef PARTICLE_TEXTURE
     out.uv = vertex_uv;

@@ -22,7 +22,7 @@ use bevy::{
         RenderWorld,
     },
     transform::components::GlobalTransform,
-    utils::{HashMap, HashSet},
+    utils::{HashMap, HashSet}, prelude::shape,
 };
 use bitflags::bitflags;
 use bytemuck::cast_slice_mut;
@@ -54,12 +54,15 @@ mod aligned_buffer_vec;
 mod compute_cache;
 mod effect_cache;
 mod pipeline_template;
+pub mod appear_area;
 
 use aligned_buffer_vec::AlignedBufferVec;
 
 pub use compute_cache::{ComputeCache, SpecializedComputePipeline};
 pub use effect_cache::{EffectBuffer, EffectCache, EffectCacheId, EffectSlice};
 pub use pipeline_template::PipelineRegistry;
+
+use self::appear_area::{ParticleAppearArea, AppearAreaInfo};
 
 pub const PARTICLES_UPDATE_SHADER_HANDLE: HandleUntyped =
     HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 2763343953151597126);
@@ -118,7 +121,7 @@ impl ShaderCode for GradientWithColorSelector<Vec4> {
         // 1. defined the range and functions 
         let var_name = match self.color_selector.depend_var_name {
             crate::color_selector::Indicator::SPEED => "speed",
-            crate::color_selector::Indicator::SIZE => "size",
+            // crate::color_selector::Indicator::SIZE => "size",
             // crate::color_selector::Indicator::DIRECTION => "direction",
         };
         use quote::{quote,format_ident};
@@ -126,6 +129,13 @@ impl ShaderCode for GradientWithColorSelector<Vec4> {
         
         
        let mut final_code = TokenStream::new();
+
+       if self.color_selector.depend_var_name == crate::color_selector::Indicator::SPEED {
+           final_code.append_all(quote!{
+            // define the speed value
+            let speed = sqrt(particle.vel.x * particle.vel.x + particle.vel.y * particle.vel.y +particle.vel.z * particle.vel.z);
+           });
+       }
 
        self.color_selector.range_values.clone().into_iter().enumerate().for_each(|(i,f)|{
             let index  = i; 
@@ -150,11 +160,6 @@ impl ShaderCode for GradientWithColorSelector<Vec4> {
        });
 
        trace!("code of color_selector {}", &final_code);
-
-              
-
-
-        // let mut s:String = String::New();
 
         if self.gradient.keys().is_empty() {
             
@@ -231,14 +236,12 @@ impl ShaderCode for GradientWithColorSelector<Vec4> {
             else { out.color = #c_final; }
         });
        trace!("code of final_code before filter expression {}", &final_code);
-    //    let mut expressions = syn::parse2(final_code).unwrap();
-    //    NumberReplace.visit_expr_mut(&mut expressions);
 
        let expressions = correct_wrong_wgsl_syntax(quote!({#final_code}));
        let final_code = quote!(#expressions);
-       trace!("code of color_selector {}", &final_code);
+       trace!("final code of color_selector {}", &final_code);
 
-       final_code.to_string()
+       final_code.to_string().trim_start_matches('{').to_string().trim_end_matches('}').to_string()
     }
 }
 
@@ -349,6 +352,12 @@ pub(crate) struct SimParams {
     time: f64,
     /// Frame timestep.
     dt: f32,
+    /// mesh box width, x direction
+    box_width: u32,
+    /// mesh box height,y direction
+    box_height: u32,
+    /// mesh box long , z direction
+    box_long:u32,
 }
 
 /// GPU representation of [`SimParams`].
@@ -357,6 +366,11 @@ pub(crate) struct SimParams {
 struct SimParamsUniform {
     dt: f32,
     time: f32,
+    box_width: u32,
+    /// mesh box height,y direction
+    box_height: u32,
+    /// mesh box long , z direction
+    box_long:u32,
 }
 
 impl Default for SimParamsUniform {
@@ -364,7 +378,10 @@ impl Default for SimParamsUniform {
         SimParamsUniform {
             dt: 0.04,
             time: 0.0,
-        }
+            box_height: 0u32,
+            box_long: 0u32,
+            box_width: 0u32,
+        }   
     }
 }
 
@@ -373,6 +390,9 @@ impl From<SimParams> for SimParamsUniform {
         SimParamsUniform {
             dt: src.dt,
             time: src.time as f32,
+            box_height:src.box_height,
+            box_width:src.box_width,
+            box_long:src.box_long,
         }
     }
 }
@@ -1023,26 +1043,21 @@ pub(crate) fn extract_effects(
                 FORCE_FIELD_CODE.to_owned()
             };
 
+            let mut vertex_modifiers= String::new();
+            if let Some(grad) = &asset.render_layout.size_color_gradient {
+                vertex_modifiers = grad.to_shader_code();
+            };
             // Generate the shader code for the color over lifetime gradient.
             // TODO - Move that to a pre-pass, not each frame!
-            let mut vertex_modifiers =
-                // if let Some(grad) = &asset.render_layout.lifetime_color_gradient {
-                //     grad.to_shader_code()
-                // } else {
-                //     String::new()
-                // };
-                match &asset.render_layout.lifetime_color_gradient {
+             match &asset.render_layout.lifetime_color_gradient {
                     Some(GradientEnum::ColorSelector(color_selector))=>
-                    color_selector.to_shader_code(),
+                    vertex_modifiers += &color_selector.to_shader_code(),
                     Some(GradientEnum::Gradient(gradient))=>
-                    gradient.to_shader_code()
-                    ,
-                    _ => String::new(),
+                    vertex_modifiers +=&gradient.to_shader_code(),
+                    _ => (),
                 };
 
-            if let Some(grad) = &asset.render_layout.size_color_gradient {
-                vertex_modifiers += &grad.to_shader_code();
-            }
+            
             trace!("vertex_modifiers={}", vertex_modifiers);
 
             // Configure the shader template, and make sure a corresponding shader asset exists
@@ -1110,18 +1125,6 @@ struct Particle {
     /// Total particle lifetime.
     pub lifetime: f32, 
 }
-
-/// the area to present particles
-#[repr(C)]
-#[derive(Debug, Copy, Clone, Pod, Zeroable, AsStd430,Default)]
-struct ParticleAppearArea {
-    /// the area position , mesh box's center.
-    pub position: [f32; 3],
-    actived:i32, // if actived == -1i32, then disable current AppreaArea
-    pub flow_direction: [f32; 3],
-    pub flow_speed: f32,
-}
-
 /// A single vertex of a particle mesh as stored in a GPU buffer.
 #[repr(C)]
 #[derive(Copy, Clone, Pod, Zeroable)]
@@ -1130,46 +1133,6 @@ struct ParticleVertex {
     pub position: [f32; 3],
     /// UV coordinates of vertex.
     pub uv: [f32; 2],
-}
-
-/// area for particles to show
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Copy)]
-pub struct AppearAreaInfo {
-    /// appear area's position
-    pub position: Vec3,
-    /// flow direction ,x y z
-    pub flow_direction: Vec3,
-
-    /// flow speed
-    pub flow_speed: f32,
-    // pub direction: fk32,
-}
-
-impl AppearAreaInfo {
-    /// init with x,y,z
-    pub fn new(position: Vec3, flow_direction: Vec3, flow_speed:f32) -> Self {
-        AppearAreaInfo {
-            position,
-            flow_direction,
-            flow_speed,
-        }
-    }
-
-    fn to_particle_appear_area(&self) -> ParticleAppearArea {
-        ParticleAppearArea {
-            position: self.position.to_array(),
-            flow_direction: self.flow_direction.to_array(),
-            flow_speed: self.flow_speed,
-            ..Default::default()            
-        }
-    }
-
-    fn none() -> ParticleAppearArea {
-        ParticleAppearArea {
-            actived: -1i32,
-            ..Default::default()            
-        }        
-    }
 }
 
 /// Global resource containing the GPU data to draw all the particle effects in all views.
@@ -1195,6 +1158,8 @@ pub(crate) struct EffectsMeta {
     /// Bind group for the indirect buffer.
     indirect_buffer_bind_group: Option<BindGroup>,
     sim_params_uniforms: UniformVec<SimParamsUniform>,
+    /// buffer for all mesh box,where the particles can be presented in
+    mesh_boxes_buffer: BufferVec<ParticleAppearArea>,
     spawner_buffer: AlignedBufferVec<SpawnerParams>,
     /// Unscaled vertices of the mesh of a single particle, generally a quad.
     /// The mesh is later scaled during rendering by the "particle size".
@@ -1222,6 +1187,7 @@ impl EffectsMeta {
         // let appear_areas_buffer = BufferVec::new(BufferUsages::STORAGE);
 
         // let appear_areas_buffer = BufferVec::new(BufferUsages::STORAGE);
+        let mesh_boxes_buffer = BufferVec::new(BufferUsages::STORAGE);
 
         Self {
             entity_map: HashMap::default(),
@@ -1240,6 +1206,7 @@ impl EffectsMeta {
             vertices,
             appear_area_buffer_bind_group: None,
             appear_areas_buffer_list: HashMap::default(),
+            mesh_boxes_buffer,
         }
     }
 }

@@ -25,8 +25,8 @@ pub enum Indicator {
     /// particles' speed
     SPEED,
     // DIRECTION,
-    /// particles' size
-    SIZE,
+    // / particles' size
+    // SIZE,
 }
 
 /// color selector

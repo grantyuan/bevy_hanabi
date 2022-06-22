@@ -61,7 +61,14 @@ fn setup(
     // gradient.add_key(0.1, Vec4::new(1.0, 1.0, 0.0, 1.0));
     selector.gradient.add_key(0.4, Vec4::new(1.0, 0.0, 0.0, 1.0));
     selector.gradient.add_key(1.0, Vec4::splat(0.0));
-    let mut gradient = GradientEnum::ColorSelector::<Vec4>(selector);
+    let gradient = GradientEnum::ColorSelector::<Vec4>(selector);
+
+    let mut size_gradient = Gradient::new();
+    size_gradient.add_key(0.0, Vec2::splat(1.0));
+    size_gradient.add_key(0.5, Vec2::splat(2.0));
+    size_gradient.add_key(1.0, Vec2::splat(0.0));
+
+
     let mut spawner = Spawner::rate(1000.0.into());
     spawner.set_particles_live_time(2.0);
     let effect = effects.add(
@@ -73,6 +80,8 @@ fn setup(
         }
         .render(ParticleTextureModifier {
             texture: texture_handle.clone(),
+        }).render(SizeOverLifetimeModifier{
+            gradient: size_gradient,
         })
         .render(ColorOverLifetimeModifier {
             gradient: gradient.clone(),

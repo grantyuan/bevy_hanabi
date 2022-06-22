@@ -90,21 +90,23 @@ mod plugin;
 mod render;
 mod spawn;
 
+pub mod color_selector;
+pub mod mesh;
 #[cfg(test)]
 mod test_utils;
-pub mod color_selector;
 mod wgsl_syntex_tools;
 
 pub use asset::EffectAsset;
 pub use bundle::ParticleEffectBundle;
-pub use gradient::{Gradient, GradientKey, GradientEnum, GradientWithColorSelector};
+pub use gradient::{Gradient, GradientEnum, GradientKey, GradientWithColorSelector};
 pub use modifiers::{
     AccelModifier, ColorOverLifetimeModifier, ForceFieldModifier, ForceFieldParam, InitModifier,
-    ParticleTextureModifier, PositionCircleModifier, PositionSphereModifier, RenderModifier,
-    ShapeDimension, SizeOverLifetimeModifier, UpdateModifier, PositionModifier, FFNUM,
+    ParticleTextureModifier, PositionCircleModifier, PositionModifier, PositionSphereModifier,
+    RenderModifier, ShapeDimension, SizeOverLifetimeModifier, UpdateModifier, FFNUM,
 };
 pub use plugin::HanabiPlugin;
-pub use render::{EffectCacheId,AppearAreaInfo};
+pub use render::appear_area::*;
+pub use render::EffectCacheId;
 pub use spawn::{Spawner, Value};
 
 #[cfg(not(any(feature = "2d", feature = "3d")))]

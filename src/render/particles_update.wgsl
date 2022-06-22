@@ -6,6 +6,10 @@ struct Particle {
 };
 
 struct ParticleAppearArea {    
+    // position: vec3<f32>; 
+
+    // cube_vertex_min:vec3<f32>;
+    // cube_vertex_max:vec3<f32>;
     position: vec3<f32>; 
     actived:i32;
     flow_direction:vec3<f32>;
@@ -25,6 +29,9 @@ struct ParticleBuffer {
 struct SimParams {
     dt: f32;
     time: f32;
+    box_width:u32;
+    box_height:u32;
+    box_long:u32;
 };
 
 struct ForceFieldParam {
@@ -51,6 +58,8 @@ struct Spawner {
 struct IndirectBuffer {
     indices: [[stride(4)]] array<u32>;
 };
+
+// var<uniform> values:array<array<array<i32>>>;
 
 [[group(0), binding(0)]] var<uniform> sim_params : SimParams;
 [[group(1), binding(0)]] var<storage, read_write> particle_buffer : ParticleBuffer;

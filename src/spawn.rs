@@ -5,7 +5,8 @@ use rand::{
 use rand_pcg::Pcg32;
 use serde::{Deserialize, Serialize};
 
-use crate::render::AppearAreaInfo;
+use crate::render::appear_area::AppearAreaInfo;
+
 
 /// An RNG to be used in the CPU for the particle system engine
 pub(crate) fn new_rng() -> Pcg32 {
